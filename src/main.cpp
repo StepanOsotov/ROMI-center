@@ -1,7 +1,9 @@
 #include "main.h"
 #include "Message.h"
 
-int main()
+// ./Message /dev/ttyS1 9600 172.16.8.23 49152
+
+int main(int argc, char *argv[])
 {
   string isUdp;
   Message message;
