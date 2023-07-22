@@ -20,11 +20,17 @@
 #include <termios.h>
 #include <sys/ioctl.h>
 #include <fcntl.h>
-#include <time.h>
 #include <errno.h>
 #include <linux/gpio.h>
 #include <signal.h>
-
+//time
+#include <time.h>
+#include <sys/time.h>
+#include <ctime>
+#include <chrono>
+#include <thread>
+//
+#include <vector>
 
 using namespace std;
 

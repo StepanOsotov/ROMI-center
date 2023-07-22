@@ -7,15 +7,17 @@ Message::Message()
   whoIs = IS_NONE;
   mBuffer = new char [SIZE];
   cout << "Message() Constructor" << endl;
+  mRxFromSerial.clear();
 }
 
 //==============================================================================
 
-void Message::txrxUDP(void)
+void Message::txrxUDP(const char *udpSocket, const uint16_t udpPort)
 {
   whoIs = IS_UDP;
   cout << "switch UDP Protocol" << endl;
-  cout << "udp server 172.16.8.23:49152" << endl;
+  cout << "udp server " << udpSocket << " : "
+       << udpPort << endl;
 
   // Creating socket file descriptor
 /*
@@ -51,8 +53,8 @@ This API will return -1 upon failure.
 
   // Filling server information
   mServaddr.sin_family = AF_INET;
-  mServaddr.sin_port = htons(PORT);
-  mServaddr.sin_addr.s_addr = inet_addr("172.16.8.23");
+  mServaddr.sin_addr.s_addr = inet_addr(udpSocket);
+  mServaddr.sin_port = htons(udpPort);
 
   int n;
   socklen_t len;
@@ -98,7 +100,7 @@ This API will return -1 upon failure.
 
   mStatus = close(mSockfd);
 
-	cout << "status close() : " << mStatus << endl;
+  cout << "status close() : " << mStatus << endl;
 
 }
 
@@ -113,7 +115,6 @@ static void Message::ExitFromProg(int sig)
 
 void Message::ttyExit(int sig)
 {
-
   fprintf(stdout, "press exit, sig = %d\n", sig);
   if (mTtyRd)
   {
@@ -132,26 +133,24 @@ void Message::ttyExit(int sig)
 //  Message::ExitFromProg(sig);
 }
 
-void Message::txrxUART(void)
+void Message::txrxUART(const char *tty, const uint32_t ttyBR)
 {
-
   whoIs = IS_UART;
   cout << "switch UART Protocol" << endl;
-  cout << "device /dev/ttyS1, Baud Rate = 9600" << endl;
+  cout << "device " << tty << ", Baud Rate = " << ttyBR << endl;
   struct termio term, tstdin;
-  int baud = B9600;
   int tx_counter = AMOUNT_TX;
   size_t sizeTx;
-  mSerialDevice = open(SERIAL_DEVICE, O_RDWR | O_NDELAY);
+  mSerialDevice = open(tty, O_RDWR | O_NDELAY);
   if (mSerialDevice < 0)
   {
-    fprintf(stdout, "Failed to open SERIAL_DEVICE");
+    cout << "Failed to open  : " << tty << endl;
     //exit(1);
     return;
   }
   else
   {
-    fprintf(stdout, "success open %s (%d)\n", SERIAL_DEVICE, mSerialDevice);
+    fprintf(stdout, "success open %s (%d)\n", tty, mSerialDevice);
   }
 
   //-----------------WRITE-READ-BEGIN----------------------
@@ -174,10 +173,10 @@ void Message::txrxUART(void)
   //
   ioctl(mSerialDevice, TCGETA, &term);
   term.c_cflag |= CLOCAL|HUPCL;
-  if (baud > 0)
+  if (ttyBR > 0)
   {
     term.c_cflag &= ~CBAUD;
-    term.c_cflag |= baud;
+    term.c_cflag |= ttyBR;
   }
   term.c_lflag &= ~(ICANON | ECHO); //
   term.c_iflag &= ~ICRNL; //
@@ -186,31 +185,27 @@ void Message::txrxUART(void)
   ioctl(mSerialDevice, TCSETA, &term);
   fcntl(mSerialDevice, F_SETFL, fcntl(mSerialDevice, F_GETFL, 0) & ~O_NDELAY);
   //
-  if ((mTtyRd = fopen(SERIAL_DEVICE, "r")) == NULL )
+  if ((mTtyRd = fopen(tty, "r")) == NULL )
   {
-    perror(SERIAL_DEVICE);
+    perror(tty);
     exit(errno);
   }
-  if ((mTtyWr = fopen(SERIAL_DEVICE, "w")) == NULL )
+  if ((mTtyWr = fopen(tty, "w")) == NULL )
   {
-    perror(SERIAL_DEVICE);
+    perror(tty);
     exit(errno);
   }
   fprintf(stdout, "success open mTtyWr = 0x%p, mTtyRd = 0x%p,\n", mTtyWr, mTtyRd);
   //
-
+  
   while(tx_counter--)
   {
     snprintf(mBuffer, SIZE, "Hello Stepan, cnt %d\n", tx_counter);
     sizeTx = strlen(mBuffer);
     write(fileno(stdout), mBuffer, sizeTx);
-    write(fileno(mTtyWr),    mBuffer, sizeTx);
+    write(fileno(mTtyWr), mBuffer, sizeTx);
     //fwrite("Hello\n", 6, 6, stdout);
     usleep(100000);
-//    USART3_SendByte('D');
-//    sizeTx += fwrite("Hello\n", 6, 6, mTtyWr);
-//    printf("tx data len = %d (%d \\ %d)\n", sizeTx, tx_counter, AMOUNT_TX);
-//    usleep(500000);
   }
 
   fprintf(stdout, "work echo\n");
@@ -240,19 +235,6 @@ void Message::txrxUART(void)
         }
       }
     }
-/*
-    if ((mNum = read(fileno(stdin), mBuffer, SIZE)) > 0)
-    {
-      if(mNum == 0x0D)  // press Enter
-      {
-        if(!memcmp(mBuffer, "exit", 4))
-        {
-          ttyExit(0);
-        }
-        write(fileno(mTtyWr), mBuffer, mNum);
-      }
-    }
-*/
     if ((mNum = read(fileno(mTtyRd), mBuffer, SIZE)) > 0)
     {
       write(fileno(stdout), mBuffer, mNum);
@@ -260,6 +242,178 @@ void Message::txrxUART(void)
 //      write(fileno(stdout), mBuffer, mNum);
     }
   }
+}
+
+//==============================================================================
+
+void Message::workUARTUDP(const char *udpSocket, const uint16_t udpPort,
+                          const char *tty, const uint32_t ttyBR)
+{
+  //-------------------------------------------------------------------
+  //++++++++++++++++----Open-Descripter----
+  cout << "UART Protocol" << endl;
+  cout << "device " << tty << ", Baud Rate = " << ttyBR << endl;
+  mSerialDevice = open(tty, O_RDWR | O_NDELAY);
+  if (mSerialDevice < 0)
+  {
+    cout << "Failed to open  : " << tty << endl;
+    return;
+  }
+  else
+  {
+    cout << "success open " << tty << " (" << mSerialDevice << ")" << endl;
+  }
+  //++++++++++++++++----read-and-rewrite-parameter----
+  struct termio term;
+  ioctl(mSerialDevice, TCGETA, &term);
+  term.c_cflag |= CLOCAL|HUPCL;
+  if (ttyBR > 0)
+  {
+    term.c_cflag &= ~CBAUD;
+    term.c_cflag |= ttyBR;
+  }
+  term.c_lflag &= ~(ICANON | ECHO); //
+  term.c_iflag &= ~ICRNL; //
+  term.c_cc[VMIN] = 0;
+  term.c_cc[VTIME] = 10;
+  ioctl(mSerialDevice, TCSETA, &term);
+  //++++++++++++++++----open-to-read-data
+  if ((mTtyRd = fopen(tty, "r")) == NULL )
+  {
+    perror(tty);
+    exit(errno);
+  }
+  cout << "success open mTtyRd = 0x" << &mTtyRd << endl;
+  cout << "wait 10 message, or limit 5 sec" << endl;
+  
+  //++++++++++++++++----
+  
+  uint16_t amountRd = 10;
+  int rdChar;
+  int rdCount = 0;
+  time_t beginTime = time(nullptr);
+  time_t nowTime;
+  uint32_t deltaMs = 0;
+  uint32_t changeTime = 0;
+  
+  while(1)
+  {
+    //++++++++++++++++----
+    nowTime = time(nullptr);
+    deltaMs = nowTime - beginTime;
+    if( deltaMs > 10 )
+      break;
+    if(deltaMs != changeTime)
+    {
+      cout << "time : " << deltaMs << endl;
+      changeTime = deltaMs;
+    }
+    //++++++++++++++++----
+    if ((mNum = read(fileno(mTtyRd), &rdChar, 1)) > 0)
+    {
+      mBuffer[rdCount] = static_cast<char>(rdChar);
+      rdCount++;
+      //cout << static_cast<char>(rdChar) << endl;
+
+      //wait Enter
+      if(static_cast<char>(rdChar) == 0x0D)
+      {
+        cout << "read (" << rdCount << ") : " << mBuffer << endl;
+        amountRd--;
+        
+        mRxFromSerial.push_back(mBuffer);
+        beginTime = time(nullptr);
+        changeTime = 0;
+        
+        memset(mBuffer, 0, rdCount);
+        rdCount = 0;
+        nowTime = time(nullptr);
+        cout << "time : " << nowTime << endl;
+        if(!amountRd)
+        {
+          break;
+        }
+      }
+    }
+    //++++++++++++++++----
+  }
+
+  mStatus = close(mSerialDevice);
+
+  cout << "status close() : " << mStatus << endl;
+  
+  //-------------------------------------------------------------------
+  
+  cout << "UDP Protocol" << endl;
+  cout << "udp server " << udpSocket << " : "
+       << udpPort << endl;
+
+  mSockfd = socket(AF_INET, SOCK_DGRAM, 0);
+  if ( mSockfd < 0 )
+  {
+    perror("socket creation failed");
+    //exit(EXIT_FAILURE);
+    return;
+  }
+  else
+  {
+    cout << "success open " << udpSocket << endl; 
+  }
+
+  memset(&mServaddr, 0, sizeof(mServaddr));
+
+  // Filling server information
+  mServaddr.sin_family = AF_INET;
+  mServaddr.sin_addr.s_addr = inet_addr(udpSocket);
+  mServaddr.sin_port = htons(udpPort);
+  
+  string strGet;
+  int n;
+  socklen_t len;
+  
+  cout << " vector" << endl;
+  for(vector<string>::iterator it = mRxFromSerial.begin();
+      it != mRxFromSerial.end(); it++)
+  {
+    strGet = *it;
+    //++++++++++++++++----
+    sendto(mSockfd, (const char *)strGet.c_str(), strGet.length(),
+      MSG_CONFIRM, (const struct sockaddr *) &mServaddr,
+        sizeof(mServaddr));
+
+    cout << "message tx : " << strGet << endl;
+
+    unsigned long valTimeout = 6000;
+    //без этого вызова висим вечно
+    setsockopt (mSockfd,
+                SOL_SOCKET,
+                SO_RCVTIMEO,
+                (const char*)&valTimeout,
+                sizeof(unsigned long));
+
+    n = recvfrom(mSockfd, (char *)mBuffer, SIZE,
+          MSG_WAITALL, (struct sockaddr *) &mServaddr,
+          &len);
+    mBuffer[n] = '\0';
+    
+    this_thread::sleep_for(chrono::milliseconds(500) );
+
+    cout << "from Server rx:" << mBuffer << endl;
+    //++++++++++++++++----
+    //cout << *it;
+  }
+  cout << endl;
+  
+  mTxMessage = "exit";
+
+  sendto(mSockfd, (const char *)mTxMessage.c_str(), mTxMessage.length(),
+    MSG_CONFIRM, (const struct sockaddr *) &mServaddr,
+      sizeof(mServaddr));
+  
+  mStatus = close(mSockfd);
+
+  cout << "status close() : " << mStatus << endl;
+  //-------------------------------------------------------------------
 }
 
 //==============================================================================
