@@ -15,6 +15,7 @@ class Message
                      const char *tty, const uint32_t ttyBR);
     
     void ttyExit(int sig);
+    void encrypt(vector <string> *msgRx, vector <string> *msgEncrypt);
 
     virtual ~Message();
 
@@ -35,6 +36,7 @@ class Message
     int mStatus;
     struct sockaddr_in mServaddr;
     vector <string> mRxFromSerial;
+    vector <string> mTxToUdp;
 
     //UART
     //const char *SERIAL_DEVICE = "/dev/ttyS1";

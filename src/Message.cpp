@@ -105,12 +105,52 @@ This API will return -1 upon failure.
 }
 
 //==============================================================================
-/*
-static void Message::ExitFromProg(int sig)
+
+void Message::encrypt(vector <string> *msgRx, vector <string> *msgEncrypt)
 {
-  exit(sig);
+  string lString;
+  uint16_t length;
+  msgEncrypt->clear();
+	
+	char *lchar = new char [SIZE];
+
+  cout << "encrypt begin >>>>>>>>>>>" << endl;
+
+  for(vector<string>::iterator it = msgRx->begin();
+      it != msgRx->end(); it++)
+  {
+    lString = *it;
+    cout << lString.c_str();
+
+    length = lString.length();
+
+    strcpy(lchar, lString.c_str());
+
+    for(uint16_t i = 0; i < length-2; i++)
+    {
+      (*(lchar + i))++;
+    }
+
+    //cout << lchar << endl;
+
+    msgEncrypt->push_back(lchar);
+
+  }
+
+  cout << "==================" << endl;
+
+  for(vector<string>::iterator it = msgEncrypt->begin();
+      it != msgEncrypt->end(); it++)
+  {
+    lString = *it;
+    cout << lString.c_str();
+  }
+
+  cout << "encrypt end >>>>>>>>>>>" << endl;
+	
+	delete [] lchar;
 }
-*/
+
 //==============================================================================
 
 void Message::ttyExit(int sig)
@@ -130,8 +170,9 @@ void Message::ttyExit(int sig)
   ioctl(fileno(stdin), TCSETA, &mStdinSave);
 
   exit(sig);
-//  Message::ExitFromProg(sig);
 }
+
+//==============================================================================
 
 void Message::txrxUART(const char *tty, const uint32_t ttyBR)
 {
@@ -285,9 +326,9 @@ void Message::workUARTUDP(const char *udpSocket, const uint16_t udpPort,
   }
   cout << "success open mTtyRd = 0x" << &mTtyRd << endl;
   cout << "wait 10 message, or limit 5 sec" << endl;
-  
+
   //++++++++++++++++----
-  
+
   uint16_t amountRd = 10;
   int rdChar;
   int rdCount = 0;
@@ -295,13 +336,13 @@ void Message::workUARTUDP(const char *udpSocket, const uint16_t udpPort,
   time_t nowTime;
   uint32_t deltaMs = 0;
   uint32_t changeTime = 0;
-  
+
   while(1)
   {
     //++++++++++++++++----
     nowTime = time(nullptr);
     deltaMs = nowTime - beginTime;
-    if( deltaMs > 10 )
+    if( deltaMs > 5 )
       break;
     if(deltaMs != changeTime)
     {
@@ -319,8 +360,7 @@ void Message::workUARTUDP(const char *udpSocket, const uint16_t udpPort,
       if(static_cast<char>(rdChar) == 0x0D)
       {
         cout << "read (" << rdCount << ") : " << mBuffer << endl;
-        amountRd--;
-        
+
         mRxFromSerial.push_back(mBuffer);
         beginTime = time(nullptr);
         changeTime = 0;
@@ -328,7 +368,9 @@ void Message::workUARTUDP(const char *udpSocket, const uint16_t udpPort,
         memset(mBuffer, 0, rdCount);
         rdCount = 0;
         nowTime = time(nullptr);
-        cout << "time : " << nowTime << endl;
+        cout << "time : " << nowTime;
+				amountRd--;
+				cout << ", amount from tty : " << amountRd << endl;
         if(!amountRd)
         {
           break;
@@ -341,9 +383,9 @@ void Message::workUARTUDP(const char *udpSocket, const uint16_t udpPort,
   mStatus = close(mSerialDevice);
 
   cout << "status close() : " << mStatus << endl;
-  
+
   //-------------------------------------------------------------------
-  
+
   cout << "UDP Protocol" << endl;
   cout << "udp server " << udpSocket << " : "
        << udpPort << endl;
@@ -366,14 +408,16 @@ void Message::workUARTUDP(const char *udpSocket, const uint16_t udpPort,
   mServaddr.sin_family = AF_INET;
   mServaddr.sin_addr.s_addr = inet_addr(udpSocket);
   mServaddr.sin_port = htons(udpPort);
-  
+
+  encrypt(&mRxFromSerial, &mTxToUdp);
+
   string strGet;
   int n;
   socklen_t len;
-  
+
   cout << " vector" << endl;
-  for(vector<string>::iterator it = mRxFromSerial.begin();
-      it != mRxFromSerial.end(); it++)
+  for(vector<string>::iterator it = mTxToUdp.begin();
+      it != mTxToUdp.end(); it++)
   {
     strGet = *it;
     //++++++++++++++++----
@@ -381,7 +425,7 @@ void Message::workUARTUDP(const char *udpSocket, const uint16_t udpPort,
       MSG_CONFIRM, (const struct sockaddr *) &mServaddr,
         sizeof(mServaddr));
 
-    cout << "message tx : " << strGet << endl;
+    cout << "message tx : " << strGet;
 
     unsigned long valTimeout = 6000;
     //без этого вызова висим вечно
@@ -409,7 +453,7 @@ void Message::workUARTUDP(const char *udpSocket, const uint16_t udpPort,
   sendto(mSockfd, (const char *)mTxMessage.c_str(), mTxMessage.length(),
     MSG_CONFIRM, (const struct sockaddr *) &mServaddr,
       sizeof(mServaddr));
-  
+
   mStatus = close(mSockfd);
 
   cout << "status close() : " << mStatus << endl;
@@ -420,8 +464,8 @@ void Message::workUARTUDP(const char *udpSocket, const uint16_t udpPort,
 
 Message::~Message()
 {
-  delete [] mBuffer;
   cout << "Message() Destructor" << endl;
+  delete [] mBuffer;
 
   if(whoIs == IS_UART)
   {
